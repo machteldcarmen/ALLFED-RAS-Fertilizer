@@ -10,14 +10,16 @@ these names.
 
 ## Required downloads
 
-| File                                                          | FAOSTAT domain                         | Place under                                        |
-|---------------------------------------------------------------|----------------------------------------|----------------------------------------------------|
-| `Inputs_FertilizersNutrient_E_All_Data_NOFLAG.csv`            | Inputs → Fertilizers by Nutrient       | `data/Inputs_FertilizersNutrient_E_All_Data/`      |
-| `Fertilizers_DetailedTradeMatrix_E_All_Data_NOFLAG.csv`       | Trade → Detailed trade matrix          | `data/Fertilizers_DetailedTradeMatrix_E_All_Data/` |
+| File                                                          | FAOSTAT domain                                              | Place under                                        |
+|---------------------------------------------------------------|-------------------------------------------------------------|----------------------------------------------------|
+| `Inputs_FertilizersNutrient_E_All_Data_NOFLAG.csv`            | Domains Table → Inputs → Fertilizers by Nutrient            | `data/Inputs_FertilizersNutrient_E_All_Data/`      |
+| `Fertilizers_DetailedTradeMatrix_E_All_Data_NOFLAG.csv`       | Domains Table → Inputs → Detailed trade matrix(fertilizers) | `data/Fertilizers_DetailedTradeMatrix_E_All_Data/` |
 
 Go to https://www.fao.org/faostat/, search for the domain name, and use
 the "**Bulk download** → *All Data (Normalized)*" option. The `_NOFLAG`
 variant (no flag columns) is the smallest and what the loaders expect.
+https://www.fao.org/faostat/en/#data/RFN
+https://www.fao.org/faostat/en/#data/RFM
 
 ## What the loaders read
 
