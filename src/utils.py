@@ -20,6 +20,31 @@ import pandas as pd
 from .model import RASResult
 
 
+ALLFED_MPLSTYLE_URL = (
+    "https://raw.githubusercontent.com/allfed/"
+    "ALLFED-matplotlib-style-sheet/main/ALLFED.mplstyle"
+)
+
+
+def use_allfed_style() -> bool:
+    """Activate the ALLFED matplotlib style sheet.
+
+    Tries the online stylesheet first; falls back silently to the default
+    matplotlib style if offline or if the URL is unreachable, so tests
+    and CI without internet don't break.
+
+    Returns:
+        bool: True if the ALLFED style was successfully applied.
+    """
+    import matplotlib.pyplot as plt
+
+    try:
+        plt.style.use(ALLFED_MPLSTYLE_URL)
+        return True
+    except Exception:
+        return False
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Plotly: interactive single-run figures
 # ──────────────────────────────────────────────────────────────────────────────
@@ -159,6 +184,8 @@ def plot_comparison_dashboard(
         4. Largest bilateral trade-flow changes
     """
     import matplotlib.pyplot as plt
+
+    use_allfed_style()
 
     fig, axes = plt.subplots(2, 2, figsize=(18, 14))
 

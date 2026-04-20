@@ -10,5 +10,6 @@ The interface lives in :mod:`src.model`.  A typical minimal run looks like::
 """
 
 from .model import FertilizerRAS, RASResult, run_ras
+from .utils import use_allfed_style
 
-__all__ = ["FertilizerRAS", "RASResult", "run_ras"]
+__all__ = ["FertilizerRAS", "RASResult", "run_ras", "use_allfed_style"]
