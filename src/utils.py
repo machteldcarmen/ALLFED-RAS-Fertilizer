@@ -14,8 +14,6 @@ Two backends are used:
 
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 import pandas as pd
 
@@ -50,9 +48,7 @@ def plot_sankey(
                 targets.append(node_map[importer])
                 values.append(v)
 
-    colors = [
-        "#2ca02c" if result.S_hat[c] > 0 else "#1f77b4" for c in labels
-    ]
+    colors = ["#2ca02c" if result.S_hat[c] > 0 else "#1f77b4" for c in labels]
 
     fig = go.Figure(
         data=[
@@ -170,10 +166,22 @@ def plot_comparison_dashboard(
     ax = axes[0, 0]
     top = comparison.nsmallest(top_k, "Change_pp")
     y = np.arange(len(top))
-    ax.barh(y, top["Cover_base_%"], height=0.4, label="Pre-shock",
-            color="#2980b9", alpha=0.85)
-    ax.barh(y + 0.4, top["Cover_shock_%"], height=0.4, label="Post-shock",
-            color="#c0392b", alpha=0.85)
+    ax.barh(
+        y,
+        top["Cover_base_%"],
+        height=0.4,
+        label="Pre-shock",
+        color="#2980b9",
+        alpha=0.85,
+    )
+    ax.barh(
+        y + 0.4,
+        top["Cover_shock_%"],
+        height=0.4,
+        label="Post-shock",
+        color="#c0392b",
+        alpha=0.85,
+    )
     ax.set_yticks(y + 0.2)
     ax.set_yticklabels(top.index, fontsize=8)
     ax.set_xlabel("Supply coverage (%)")
@@ -183,15 +191,25 @@ def plot_comparison_dashboard(
 
     # Panel 2 — shocked countries: production pre vs post
     ax2 = axes[0, 1]
-    shocked_rows = comparison[
-        comparison["P_baseline"] != comparison["P_shocked"]
-    ]
+    shocked_rows = comparison[comparison["P_baseline"] != comparison["P_shocked"]]
     if not shocked_rows.empty:
         y2 = np.arange(len(shocked_rows))
-        ax2.barh(y2, shocked_rows["P_baseline"], height=0.4,
-                 label="Pre-shock", color="#2980b9", alpha=0.85)
-        ax2.barh(y2 + 0.4, shocked_rows["P_shocked"], height=0.4,
-                 label="Post-shock", color="#c0392b", alpha=0.85)
+        ax2.barh(
+            y2,
+            shocked_rows["P_baseline"],
+            height=0.4,
+            label="Pre-shock",
+            color="#2980b9",
+            alpha=0.85,
+        )
+        ax2.barh(
+            y2 + 0.4,
+            shocked_rows["P_shocked"],
+            height=0.4,
+            label="Post-shock",
+            color="#c0392b",
+            alpha=0.85,
+        )
         ax2.set_yticks(y2 + 0.2)
         ax2.set_yticklabels(shocked_rows.index, fontsize=9)
         ax2.set_xlabel("Production")
@@ -203,10 +221,20 @@ def plot_comparison_dashboard(
 
     # Panel 3 — coverage histogram
     ax3 = axes[1, 0]
-    ax3.hist(comparison["Cover_base_%"].clip(0, 250).dropna(), bins=30,
-             alpha=0.6, label="Pre-shock", color="#2980b9")
-    ax3.hist(comparison["Cover_shock_%"].clip(0, 250).dropna(), bins=30,
-             alpha=0.6, label="Post-shock", color="#c0392b")
+    ax3.hist(
+        comparison["Cover_base_%"].clip(0, 250).dropna(),
+        bins=30,
+        alpha=0.6,
+        label="Pre-shock",
+        color="#2980b9",
+    )
+    ax3.hist(
+        comparison["Cover_shock_%"].clip(0, 250).dropna(),
+        bins=30,
+        alpha=0.6,
+        label="Post-shock",
+        color="#c0392b",
+    )
     ax3.set_xlabel("Supply coverage (%)")
     ax3.set_ylabel("Number of countries")
     ax3.set_title("Distribution of supply coverage")
@@ -231,7 +259,9 @@ def plot_comparison_dashboard(
 
     fig.suptitle(
         f"RAS model — {nutrient_name} — baseline vs shocked",
-        fontsize=14, fontweight="bold", y=1.01,
+        fontsize=14,
+        fontweight="bold",
+        y=1.01,
     )
     fig.tight_layout()
     return fig

@@ -84,9 +84,7 @@ def load_trade(path: str | Path, years: list[int]) -> pd.DataFrame:
 # ──────────────────────────────────────────────────────────────────────────────
 # Extractors (per nutrient)
 # ──────────────────────────────────────────────────────────────────────────────
-def _series_by_code(
-    df: pd.DataFrame, item_code: int, element_code: int
-) -> pd.Series:
+def _series_by_code(df: pd.DataFrame, item_code: int, element_code: int) -> pd.Series:
     mask = (df["Item Code"] == item_code) & (df["Element Code"] == element_code)
     s = df.loc[mask, ["Area", "avg"]].dropna(subset=["avg"])
     return s.groupby("Area")["avg"].sum()

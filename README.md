@@ -1,5 +1,6 @@
 # ALLFED Fertilizer RAS model
 
+[![Testing](https://github.com/machteldcarmen/ALLFED-RAS-Fertilizer/actions/workflows/testing.yml/badge.svg)](https://github.com/machteldcarmen/ALLFED-RAS-Fertilizer/actions/workflows/testing.yml)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 A small, reusable Python package that runs a **4-phase RAS (iterative
@@ -79,28 +80,40 @@ The full derivation, assumptions, and references are in
 
 ```
 allfed-fertilizer-ras/
+├── .github/workflows/          # CI: automated testing + linting
+│   ├── testing.yml
+│   └── lint.yml
 ├── src/                        # all logic lives here
 │   ├── model.py                # FertilizerRAS class + run_ras + RASResult
 │   ├── preprocessing.py        # FAOSTAT loaders, country filtering, shocks
 │   ├── postprocessing.py       # comparisons, summaries, CSV export
-│   └── utils.py                # plotly + matplotlib plots
+│   ├── utils.py                # plotly + matplotlib plots
+│   └── README.md
 ├── scripts/                    # thin notebooks that call src/
 │   ├── toy_example.ipynb       # 5-country demo, no external data
 │   ├── real_data_nitrogen.ipynb# full FAOSTAT run for one nutrient
 │   ├── all_nutrients.ipynb     # N, P, K with a shock
-│   └── validation/             # historical-shock validation notebooks
-│       ├── fertilizer_validation_2009_crisis.ipynb
-│       └── fertilizer_validation_russia_ukraine.ipynb
+│   ├── validation/             # historical-shock validation notebooks
+│   │   ├── fertilizer_validation_2009_crisis.ipynb
+│   │   └── fertilizer_validation_russia_ukraine.ipynb
+│   └── README.md
 ├── data/
 │   └── README.md               # where to put FAOSTAT bulk CSVs
 ├── results/                    # generated outputs (git-ignored)
+│   └── README.md
 ├── tests/
-│   └── test_ras.py             # mass-balance and convergence tests
+│   ├── test_ras.py             # mass-balance and convergence tests
+│   └── README.md
 ├── docs/
-│   └── methodology.md          # full equations & references
+│   ├── methodology.md          # full equations & references
+│   └── README.md
 ├── pyproject.toml
-├── requirements.txt
-├── LICENSE
+├── setup.py                    # pip install -e .
+├── requirements.txt            # pip dependencies
+├── environment.yml             # conda environment (alternative)
+├── .flake8                     # lint config
+├── .gitignore
+├── LICENSE                     # Apache-2.0
 └── README.md                   # this file
 ```
 

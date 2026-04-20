@@ -23,11 +23,11 @@ import pathlib
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import numpy as np
-import pandas as pd
-import pytest
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+import pytest  # noqa: E402
 
-from src.model import FertilizerRAS, run_ras
+from src.model import FertilizerRAS, run_ras  # noqa: E402
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -40,11 +40,11 @@ def toy():
     P = pd.Series([4_000, 7_000, 5_500, 2_500, 1_000], index=countries, dtype=float)
     C = pd.Series([1_200, 6_500, 4_000, 5_000, 3_500], index=countries, dtype=float)
     T0_data = {
-        "Russia": [    0,  500,  300, 1200,  800],
-        "China":  [  100,    0,  200, 1500,  400],
-        "USA":    [  200,  300,    0,  400,  800],
-        "India":  [    0,   50,    0,    0,    0],
-        "Brazil": [    0,    0,   50,    0,    0],
+        "Russia": [0, 500, 300, 1200, 800],
+        "China": [100, 0, 200, 1500, 400],
+        "USA": [200, 300, 0, 400, 800],
+        "India": [0, 50, 0, 0, 0],
+        "Brazil": [0, 0, 50, 0, 0],
     }
     T0 = pd.DataFrame(T0_data, index=countries, columns=countries).T.astype(float)
     return P, C, T0
@@ -72,7 +72,7 @@ def test_run_ras_preserves_zero_structure(toy):
     """Zero entries in T0 must remain zero in X."""
     _, _, T0 = toy
     S_hat = pd.Series([300.0, 200.0, 500.0, 0.0, 0.0], index=T0.index)
-    D_hat = pd.Series([ 50.0,  50.0, 100.0, 400.0, 400.0], index=T0.index)
+    D_hat = pd.Series([50.0, 50.0, 100.0, 400.0, 400.0], index=T0.index)
     S_hat = S_hat * (D_hat.sum() / S_hat.sum())
 
     X = run_ras(T0, S_hat, D_hat)

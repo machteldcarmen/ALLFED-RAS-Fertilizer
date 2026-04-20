@@ -51,16 +51,12 @@ def build_comparison(
     return df.round(2)
 
 
-def most_affected(
-    comparison: pd.DataFrame, n: int = 15
-) -> pd.DataFrame:
+def most_affected(comparison: pd.DataFrame, n: int = 15) -> pd.DataFrame:
     """Return the ``n`` countries with the worst coverage drop (most negative)."""
     return comparison.nsmallest(n, "Change_pp")
 
 
-def least_affected(
-    comparison: pd.DataFrame, n: int = 10
-) -> pd.DataFrame:
+def least_affected(comparison: pd.DataFrame, n: int = 10) -> pd.DataFrame:
     """Return the ``n`` countries whose coverage changed the least or improved."""
     return comparison.nlargest(n, "Change_pp")
 

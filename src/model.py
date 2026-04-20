@@ -20,8 +20,6 @@ no cross-nutrient coupling.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
-
 import numpy as np
 import pandas as pd
 
@@ -102,7 +100,9 @@ def run_ras(
         r, c = r_new, c_new
         if max_err < tol:
             if verbose:
-                print(f"RAS converged in {iteration} iterations (max_err={max_err:.2e})")
+                print(
+                    f"RAS converged in {iteration} iterations (max_err={max_err:.2e})"
+                )
             break
     else:
         if verbose:
@@ -264,7 +264,7 @@ class FertilizerRAS:
         B = self.P - self.C
         surplus = B > 0
 
-        K = self.P.where(~surplus, self.C)          # deficit: P, surplus: C
+        K = self.P.where(~surplus, self.C)  # deficit: P, surplus: C
         S_star = B.where(surplus, 0.0).astype(float)
         D_star = (-B).where(~surplus, 0.0).astype(float)
 
@@ -273,9 +273,7 @@ class FertilizerRAS:
 
     # ── Phase 2 ───────────────────────────────────────────────────────────────
     @staticmethod
-    def _phase2(
-        S_star: pd.Series, D_star: pd.Series
-    ) -> tuple[pd.Series, pd.Series]:
+    def _phase2(S_star: pd.Series, D_star: pd.Series) -> tuple[pd.Series, pd.Series]:
         """Scale the larger side down so total supply == total demand.
 
         RAS requires ``sum(S_hat) == sum(D_hat)``.  If there is a global
@@ -306,23 +304,31 @@ class FertilizerRAS:
 
         if S_hat.sum() == 0 or D_hat.sum() == 0:
             # No trade flows possible; X is zeros.
-            X = pd.DataFrame(
-                0.0, index=self.countries, columns=self.countries
-            )
+            X = pd.DataFrame(0.0, index=self.countries, columns=self.countries)
         else:
             X = run_ras(
-                self.T0, S_hat, D_hat,
-                max_iter=self.max_iter, tol=self.tol, verbose=verbose,
+                self.T0,
+                S_hat,
+                D_hat,
+                max_iter=self.max_iter,
+                tol=self.tol,
+                verbose=verbose,
             )
 
         F = K + X.sum(axis=0)
         F.name = "F_final"
 
         return RASResult(
-            P=self.P, C=self.C, T0=self.T0,
-            K=K, S_star=S_star, D_star=D_star,
-            S_hat=S_hat, D_hat=D_hat,
-            X=X, F=F,
+            P=self.P,
+            C=self.C,
+            T0=self.T0,
+            K=K,
+            S_star=S_star,
+            D_star=D_star,
+            S_hat=S_hat,
+            D_hat=D_hat,
+            X=X,
+            F=F,
         )
 
     # ── Convenience ───────────────────────────────────────────────────────────
@@ -350,8 +356,11 @@ class FertilizerRAS:
                 P_shocked[country] = self.P[country] * factor
 
         shocked_model = FertilizerRAS(
-            P_shocked, self.C, self.T0,
-            max_iter=self.max_iter, tol=self.tol,
+            P_shocked,
+            self.C,
+            self.T0,
+            max_iter=self.max_iter,
+            tol=self.tol,
         )
         shocked = shocked_model.run(verbose=verbose)
         return baseline, shocked
