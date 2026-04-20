@@ -1,0 +1,48 @@
+# ── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ── Virtual environments ─────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Jupyter ──────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ── IDE / OS ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# ── Testing / coverage ───────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ── Project-specific: large data & regenerable outputs ───────────────────
+# FAOSTAT bulk extracts are NOT checked into git.
+data/Inputs_FertilizersNutrient_E_All_Data/*.csv
+data/Fertilizers_DetailedTradeMatrix_E_All_Data/*.csv
+data/*.zip
+
+# Generated outputs
+results/*.csv
+results/*.json
+results/*.html
+results/*.png
+results/*.pdf
+!results/.gitkeep
