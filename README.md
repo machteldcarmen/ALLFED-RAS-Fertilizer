@@ -87,7 +87,10 @@ allfed-fertilizer-ras/
 ├── scripts/                    # thin notebooks that call src/
 │   ├── toy_example.ipynb       # 5-country demo, no external data
 │   ├── real_data_nitrogen.ipynb# full FAOSTAT run for one nutrient
-│   └── all_nutrients.ipynb     # N, P, K with a shock
+│   ├── all_nutrients.ipynb     # N, P, K with a shock
+│   └── validation/             # historical-shock validation notebooks
+│       ├── fertilizer_validation_2009_crisis.ipynb
+│       └── fertilizer_validation_russia_ukraine.ipynb
 ├── data/
 │   └── README.md               # where to put FAOSTAT bulk CSVs
 ├── results/                    # generated outputs (git-ignored)
