@@ -19,6 +19,7 @@ no cross-nutrient coupling.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 import numpy as np
 import pandas as pd
@@ -34,6 +35,10 @@ def run_ras(
     max_iter: int = 1_000,
     tol: float = 1e-6,
     verbose: bool = False,
+    epsilon: float = 1e-9,
+    x_history: list[pd.DataFrame] | None = None,
+    r_history: list[pd.Series] | None = None,
+    c_history: list[pd.Series] | None = None,
 ) -> pd.DataFrame:
     """Find a matrix ``X`` that matches given row/col totals and preserves structure.
 
@@ -49,6 +54,26 @@ def run_ras(
     by alternately rescaling rows and columns until ``max(row_err, col_err)``
     is below ``tol``.
 
+    **Algebraic simplification.**  Because
+    ``row_sums_i = r_i * sum_j T_ij * c_j``, the update
+    ``r_new_i = r_i * s_i / row_sums_i`` simplifies to
+    ``r_new_i = s_i / (T c)_i`` — the old ``r_i`` cancels exactly.  The same
+    holds for the column update.  We therefore only compute the matrix-vector
+    products ``T @ c`` and ``r @ T`` per iteration and build the full
+    ``N x N`` matrix ``X`` only once, at the end.  This keeps the hot loop at
+    ``O(N^2)`` memory traffic instead of three ``N x N`` allocations per
+    iteration and runs on NumPy's BLAS backend.
+
+    **Structural zero / "epsilon seed".**  ALLFED shock scenarios can create
+    situations where a country suddenly needs to export (or import) even
+    though every historical entry in its row (or column) of ``T0`` is
+    exactly zero.  Pure RAS is multiplicative, so a zero row in ``T0`` stays
+    zero forever and the algorithm cannot place those flows.  To allow such
+    *emergency* trade routes to open, every off-diagonal zero entry in
+    ``T0`` is replaced by a tiny ``epsilon`` (default ``1e-9``).  The
+    diagonal is preserved at zero (countries cannot self-trade).  Set
+    ``epsilon=0.0`` to disable this behavior and keep the structural zeros.
+
     Parameters
     ----------
     T0
@@ -63,11 +88,34 @@ def run_ras(
         Iteration cap, convergence tolerance on the maximum row/column-sum
         error (same units as ``T0``), and whether to print the iteration
         on which we converged.
+    epsilon
+        Seed value used to replace off-diagonal *structural zeros* in
+        ``T0``.  Defaults to ``1e-9``.  Use ``0.0`` to keep the strict
+        historical zero pattern.
+    x_history
+        If given, append a **copy** of the current fitted matrix
+        ``X = diag(r) @ T @ diag(c)`` after **each** RAS iteration (after
+        both the row and column multipliers are updated).  Useful for small
+        teaching examples; leave ``None`` in large runs to avoid ``O(k N^2)``
+        memory.  Degenerate runs (no trade) append nothing.
+    r_history, c_history
+        If given, append a copy of the row-multiplier vector ``r`` (right
+        after the row-update step) and of the column-multiplier vector
+        ``c`` (right after the column-update step) for **every** RAS
+        iteration.  Each entry is a ``pd.Series`` indexed by country.
+        Same memory caveat as ``x_history``: only use for small matrices.
 
     Returns
     -------
     pd.DataFrame
         The fitted trade matrix ``X`` with the same index/columns as ``T0``.
+
+    Warns
+    -----
+    RuntimeWarning
+        If the iteration cap is reached without converging below ``tol``.
+        This is emitted unconditionally (even when ``verbose=False``) so
+        Monte-Carlo pipelines do not fail silently.
     """
     if not (T0.index.equals(T0.columns)):
         raise ValueError("T0 must be a square matrix with identical index and columns.")
@@ -75,29 +123,48 @@ def run_ras(
         raise ValueError("T0, S_hat and D_hat must share the same country index.")
 
     countries = T0.index.tolist()
-    T = T0.to_numpy(dtype=float, copy=True)
+    T = T0.fillna(0.0).to_numpy(dtype=float, copy=True)
+
+    if epsilon > 0:
+        zero_mask = T == 0
+        np.fill_diagonal(zero_mask, False)
+        T[zero_mask] = epsilon
+
     s = S_hat.to_numpy(dtype=float, copy=True)
     d = D_hat.to_numpy(dtype=float, copy=True)
 
-    r = np.ones(len(countries))
-    c = np.ones(len(countries))
+    n = len(countries)
+    r = np.ones(n)
+    c = np.ones(n)
 
+    Tc = T @ c
     max_err = np.inf
+
     for iteration in range(1, max_iter + 1):
-        row_sums = (r[:, None] * T * c[None, :]).sum(axis=1)
         with np.errstate(invalid="ignore", divide="ignore"):
-            r_new = np.where(row_sums > 0, r * s / row_sums, r)
+            r = np.where(Tc > 0, s / Tc, r)
 
-        col_sums = (r_new[:, None] * T * c[None, :]).sum(axis=0)
+        if r_history is not None:
+            r_history.append(pd.Series(r.copy(), index=countries, name=f"r_iter{iteration}"))
+
+        rT = r @ T
         with np.errstate(invalid="ignore", divide="ignore"):
-            c_new = np.where(col_sums > 0, c * d / col_sums, c)
+            c = np.where(rT > 0, d / rT, c)
 
-        X = r_new[:, None] * T * c_new[None, :]
-        row_err = np.abs(X.sum(axis=1) - s).max()
-        col_err = np.abs(X.sum(axis=0) - d).max()
-        max_err = max(row_err, col_err)
+        if c_history is not None:
+            c_history.append(pd.Series(c.copy(), index=countries, name=f"c_iter{iteration}"))
 
-        r, c = r_new, c_new
+        Tc = T @ c
+        row_err = np.abs(r * Tc - s).max()
+        col_err = np.abs(c * rT - d).max()
+        max_err = float(max(row_err, col_err))
+
+        if x_history is not None:
+            X_iter = r[:, None] * T * c[None, :]
+            x_history.append(
+                pd.DataFrame(X_iter, index=countries, columns=countries).copy()
+            )
+
         if max_err < tol:
             if verbose:
                 print(
@@ -105,11 +172,13 @@ def run_ras(
                 )
             break
     else:
+        msg = (
+            f"RAS did NOT converge in {max_iter} iterations "
+            f"(max_err={max_err:.2e})"
+        )
+        warnings.warn(msg, RuntimeWarning, stacklevel=2)
         if verbose:
-            print(
-                f"RAS did NOT converge in {max_iter} iterations "
-                f"(max_err={max_err:.2e})"
-            )
+            print(msg)
 
     X_final = r[:, None] * T * c[None, :]
     return pd.DataFrame(X_final, index=countries, columns=countries)
@@ -217,6 +286,11 @@ class FertilizerRAS:
         constructor zeroes it out defensively.
     max_iter, tol
         RAS iteration cap and convergence tolerance (see :func:`run_ras`).
+    epsilon
+        Seed used by :func:`run_ras` to replace off-diagonal *structural
+        zeros* in ``T0``.  Allows emergency trade routes to open in
+        post-shock scenarios where a historically-isolated country must
+        suddenly export or import.  Set to ``0.0`` to disable.
 
     Example
     -------
@@ -232,6 +306,7 @@ class FertilizerRAS:
         T0: pd.DataFrame,
         max_iter: int = 1_000,
         tol: float = 1e-6,
+        epsilon: float = 1e-9,
     ) -> None:
         countries = self._align_inputs(P, C, T0)
         self.countries = countries
@@ -245,6 +320,7 @@ class FertilizerRAS:
 
         self.max_iter = max_iter
         self.tol = tol
+        self.epsilon = epsilon
 
     @staticmethod
     def _align_inputs(P, C, T0) -> list[str]:
@@ -297,8 +373,25 @@ class FertilizerRAS:
         return S_hat, D_hat
 
     # ── Full pipeline ─────────────────────────────────────────────────────────
-    def run(self, verbose: bool = False) -> RASResult:
-        """Run Phases 1-4 and return all intermediate + final quantities."""
+    def run(
+        self,
+        verbose: bool = False,
+        x_history: list[pd.DataFrame] | None = None,
+        r_history: list[pd.Series] | None = None,
+        c_history: list[pd.Series] | None = None,
+    ) -> RASResult:
+        """Run Phases 1-4 and return all intermediate + final quantities.
+
+        Parameters
+        ----------
+        verbose
+            Print RAS convergence message when applicable.
+        x_history, r_history, c_history
+            Optional lists passed through to :func:`run_ras` — each RAS
+            iteration appends a copy of the current ``X`` / row multipliers
+            ``r`` / column multipliers ``c`` respectively.  Use for small
+            diagnostics only.
+        """
         K, S_star, D_star = self._phase1()
         S_hat, D_hat = self._phase2(S_star, D_star)
 
@@ -313,6 +406,10 @@ class FertilizerRAS:
                 max_iter=self.max_iter,
                 tol=self.tol,
                 verbose=verbose,
+                epsilon=self.epsilon,
+                x_history=x_history,
+                r_history=r_history,
+                c_history=c_history,
             )
 
         F = K + X.sum(axis=0)
@@ -361,6 +458,7 @@ class FertilizerRAS:
             self.T0,
             max_iter=self.max_iter,
             tol=self.tol,
+            epsilon=self.epsilon,
         )
         shocked = shocked_model.run(verbose=verbose)
         return baseline, shocked

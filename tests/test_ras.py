@@ -158,10 +158,15 @@ def test_zero_demand_returns_no_imports(toy):
 
 
 def test_zero_T0_returns_no_trade(toy):
-    """With no historical trade, RAS has no structure to work with: X == 0."""
+    """With no historical trade and **strict** structural zeros (``epsilon=0``),
+    RAS cannot place flows: ``X == 0``.
+
+    With the default positive ``epsilon``, off-diagonal zeros are seeded and
+    emergency trade routes are allowed — then ``X`` need not be zero.
+    """
     P, C, T0 = toy
     T0_zero = T0 * 0.0
-    res = FertilizerRAS(P, C, T0_zero).run()
+    res = FertilizerRAS(P, C, T0_zero, epsilon=0.0).run()
     assert res.X.values.sum() == pytest.approx(0.0)
     # Each country only gets what it kept for itself.
     assert np.allclose(res.F.values, res.K.values)
