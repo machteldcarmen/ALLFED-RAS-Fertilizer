@@ -14,6 +14,9 @@ Two backends are used:
 
 from __future__ import annotations
 
+import json
+import pathlib
+
 import numpy as np
 import pandas as pd
 
@@ -52,6 +55,7 @@ def plot_sankey(
     result: RASResult,
     title: str = "Post-RAS trade flows (X)",
     min_flow: float = 1e-9,
+    countries: list[str] | None = None,
 ):
     """Sankey diagram of the bilateral trade matrix ``X``.
 
@@ -59,6 +63,9 @@ def plot_sankey(
     (``S_hat > 0``) and blue otherwise.
     """
     import plotly.graph_objects as go
+
+    if countries is not None:
+        result = subset_result(result, countries)
 
     X = result.X
     labels = list(X.index)
@@ -105,9 +112,13 @@ def plot_sankey(
 def plot_heatmap(
     result: RASResult,
     title: str = "RAS trade matrix heatmap (X)",
+    countries: list[str] | None = None,
 ):
     """Heatmap of the bilateral trade matrix (exporter x importer)."""
     import plotly.express as px
+
+    if countries is not None:
+        result = subset_result(result, countries)
 
     fig = px.imshow(
         result.X,
@@ -124,9 +135,13 @@ def plot_heatmap(
 def plot_country_bars(
     result: RASResult,
     title: str = "Country balance (Production / Demand / Availability)",
+    countries: list[str] | None = None,
 ):
     """Grouped bars per country: ``P``, ``C``, ``F_final``, ``Unmet demand``."""
     import plotly.graph_objects as go
+
+    if countries is not None:
+        result = subset_result(result, countries)
 
     unmet = (result.C - result.F).clip(lower=0)
     df = pd.DataFrame(
@@ -221,6 +236,109 @@ def _resolve_meta(country: str, country_meta: dict | None) -> dict | None:
     if country_meta and country in country_meta:
         return country_meta[country]
     return _DEFAULT_COUNTRY_META.get(country)
+
+
+_ISO3_CENTROIDS: dict[str, dict[str, float]] | None = None
+
+
+def _load_iso3_centroids() -> dict[str, dict[str, float]]:
+    """Lazy-load ISO-3 → {lat, lon} from ``data/country_iso3_centroids.json``."""
+    global _ISO3_CENTROIDS
+    if _ISO3_CENTROIDS is not None:
+        return _ISO3_CENTROIDS
+
+    path = pathlib.Path(__file__).resolve().parent.parent / "data" / "country_iso3_centroids.json"
+    with path.open(encoding="utf-8") as fh:
+        _ISO3_CENTROIDS = json.load(fh)
+    return _ISO3_CENTROIDS
+
+
+def build_faostat_country_meta(
+    areacodes_csv: str | pathlib.Path,
+) -> dict[str, dict]:
+    """Build ``country_meta`` for geographic plots from FAOSTAT AreaCodes.
+
+  Maps each FAOSTAT ``Area`` name to ``{"iso3", "lat", "lon", "display"}``
+  using the M49 numeric code (via ``pycountry``) and centroid coordinates
+  from ``data/country_iso3_centroids.json``. Built-in entries in
+  ``_DEFAULT_COUNTRY_META`` take precedence when lat/lon are more accurate.
+    """
+    try:
+        import pycountry
+    except ImportError as exc:
+        raise ImportError(
+            "build_faostat_country_meta requires pycountry "
+            "(pip install pycountry)."
+        ) from exc
+
+    ac = pd.read_csv(areacodes_csv)
+    ac.columns = [c.strip() for c in ac.columns]
+    name_col = "Area"
+    m49_col = next(c for c in ac.columns if "M49" in c)
+    centroids = _load_iso3_centroids()
+
+    out: dict[str, dict] = {}
+    for _, row in ac.iterrows():
+        name = str(row[name_col]).strip()
+        m49 = str(row[m49_col]).strip().lstrip("'").lstrip("0") or "0"
+        try:
+            rec = pycountry.countries.get(numeric=f"{int(m49):03d}")
+        except (ValueError, TypeError):
+            rec = None
+        if rec is None:
+            continue
+
+        iso3 = rec.alpha_3
+        default = _DEFAULT_COUNTRY_META.get(name)
+        if default is not None:
+            out[name] = dict(default)
+            continue
+
+        coords = centroids.get(iso3, {})
+        out[name] = {
+            "iso3": iso3,
+            "lat": coords.get("lat", 0.0),
+            "lon": coords.get("lon", 0.0),
+            "display": name,
+        }
+
+    out.setdefault("China, mainland", dict(_DEFAULT_COUNTRY_META["China, mainland"]))
+    out.setdefault(
+        "China, Taiwan Province of",
+        {"iso3": "TWN", "lat": 23.7, "lon": 121.0, "display": "Taiwan"},
+    )
+    return out
+
+
+def top_countries_for_trade(T: pd.DataFrame, n: int = 25) -> list[str]:
+    """Return the ``n`` countries with the largest total trade throughput."""
+    if not T.index.equals(T.columns):
+        raise ValueError("T must be square with identical index and columns.")
+    if n <= 0:
+        raise ValueError("n must be positive.")
+
+    M = T.to_numpy(dtype=float).copy()
+    np.fill_diagonal(M, 0.0)
+    throughput = M.sum(axis=0) + M.sum(axis=1)
+    order = np.argsort(-throughput)
+    n = min(n, len(T.index))
+    return list(T.index[order[:n]])
+
+
+def subset_result(result: RASResult, countries: list[str]) -> RASResult:
+    """Return a new :class:`RASResult` restricted to ``countries``."""
+    return RASResult(
+        P=result.P.reindex(countries),
+        C=result.C.reindex(countries),
+        T0=result.T0.loc[countries, countries],
+        K=result.K.reindex(countries),
+        S_star=result.S_star.reindex(countries),
+        D_star=result.D_star.reindex(countries),
+        S_hat=result.S_hat.reindex(countries),
+        D_hat=result.D_hat.reindex(countries),
+        X=result.X.loc[countries, countries],
+        F=result.F.reindex(countries),
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -319,6 +437,19 @@ def plot_demand_map(
     return _plot_choropleth(
         C, title=title, colorscale=colorscale,
         colorbar_title="Demand", country_meta=country_meta,
+    )
+
+
+def plot_availability_map(
+    F: pd.Series,
+    title: str = "Final fertilizer availability per country",
+    country_meta: dict | None = None,
+    colorscale: str = "Blues",
+):
+    """Choropleth world map of final availability ``F`` (domestic + imports)."""
+    return _plot_choropleth(
+        F, title=title, colorscale=colorscale,
+        colorbar_title="Final availability (F)", country_meta=country_meta,
     )
 
 

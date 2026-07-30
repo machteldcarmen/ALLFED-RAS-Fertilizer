@@ -46,6 +46,18 @@ ELEMENT_CODES: dict[str, int] = {
     "AgUse": 5157,
 }
 
+# FAOSTAT regional/economic aggregates (World, continents, sub-regions, EU,
+# LDCs, LIFDCs, ...) all use Area Codes >= 5000. They are sums over member
+# countries and must be dropped, otherwise totals are inflated by double
+# counting and per-country shares (e.g. US+Russia) are diluted.
+AGGREGATE_AREA_CODE_MIN: int = 5000
+
+# Redundant non-aggregate areas that overlap with components already present.
+# "China" (351) is the FAOSTAT sum of mainland (41) + Taiwan (214) +
+# Hong Kong (96) + Macao (128). The Detailed Trade Matrix reports
+# "China, mainland", so we keep the components and drop the 351 roll-up.
+REDUNDANT_AREA_CODES: frozenset[int] = frozenset({351})
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Loaders
@@ -84,9 +96,20 @@ def load_trade(path: str | Path, years: list[int]) -> pd.DataFrame:
 # ──────────────────────────────────────────────────────────────────────────────
 # Extractors (per nutrient)
 # ──────────────────────────────────────────────────────────────────────────────
+def _drop_aggregates(df: pd.DataFrame, area_code_col: str = "Area Code") -> pd.DataFrame:
+    """Drop FAOSTAT regional/economic aggregates and redundant roll-ups.
+
+    Keeps rows whose ``area_code_col`` is below
+    :data:`AGGREGATE_AREA_CODE_MIN` and not in :data:`REDUNDANT_AREA_CODES`.
+    """
+    codes = pd.to_numeric(df[area_code_col], errors="coerce")
+    keep = (codes < AGGREGATE_AREA_CODE_MIN) & ~codes.isin(REDUNDANT_AREA_CODES)
+    return df.loc[keep]
+
+
 def _series_by_code(df: pd.DataFrame, item_code: int, element_code: int) -> pd.Series:
     mask = (df["Item Code"] == item_code) & (df["Element Code"] == element_code)
-    s = df.loc[mask, ["Area", "avg"]].dropna(subset=["avg"])
+    s = _drop_aggregates(df.loc[mask]).loc[:, ["Area", "avg"]].dropna(subset=["avg"])
     return s.groupby("Area")["avg"].sum()
 
 
@@ -228,6 +251,91 @@ def apply_shock_reported(
         else:
             report.unmatched.append(country)
     return P_out, report
+
+
+def apply_trade_shock(
+    T0: pd.DataFrame,
+    countries: list[str] | set[str],
+    fraction: float,
+) -> pd.DataFrame:
+    """Scale bilateral flows touching any country in ``countries``.
+
+    For each cell ``T0[i, j]``, if exporter ``i`` **or** importer ``j`` is in
+    ``countries``, the value is multiplied by ``fraction`` (surviving fraction;
+    ``0.4`` = 60 % cut).  All other cells are unchanged.  The diagonal is
+    forced to zero (no self-trade).
+
+    Missing country names in ``countries`` are ignored silently; use
+    :func:`apply_trade_shock_reported` to record which names did not match.
+    """
+    T_out = T0.copy().astype(float)
+    mask = pd.DataFrame(False, index=T0.index, columns=T0.columns)
+    for country in countries:
+        if country in T0.index:
+            mask.loc[country, :] = True
+            mask.loc[:, country] = True
+    T_out[mask] = T0[mask].astype(float) * fraction
+    vals = T_out.to_numpy(copy=True)
+    np.fill_diagonal(vals, 0.0)
+    return pd.DataFrame(vals, index=T0.index, columns=T0.columns)
+
+
+@dataclass
+class TradeShockReport:
+    """Structured record of what ``apply_trade_shock_reported`` changed."""
+
+    matched_countries: list[str] = field(default_factory=list)
+    unmatched: list[str] = field(default_factory=list)
+    volume_before: float = 0.0
+    volume_after: float = 0.0
+    surviving_fraction: float = 1.0
+
+    def as_dataframe(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {
+                    "matched_countries": ", ".join(self.matched_countries),
+                    "unmatched": ", ".join(self.unmatched),
+                    "volume_before_t": self.volume_before,
+                    "volume_after_t": self.volume_after,
+                    "surviving_fraction": self.surviving_fraction,
+                    "volume_cut_t": self.volume_after - self.volume_before,
+                }
+            ]
+        )
+
+
+def apply_trade_shock_reported(
+    T0: pd.DataFrame,
+    countries: list[str] | set[str],
+    fraction: float,
+) -> tuple[pd.DataFrame, TradeShockReport]:
+    """Same as :func:`apply_trade_shock` but also returns a summary report."""
+    matched: list[str] = []
+    unmatched: list[str] = []
+    for country in countries:
+        if country in T0.index:
+            matched.append(country)
+        else:
+            unmatched.append(country)
+
+    mask = pd.DataFrame(False, index=T0.index, columns=T0.columns)
+    for country in matched:
+        mask.loc[country, :] = True
+        mask.loc[:, country] = True
+
+    volume_before = float((T0.astype(float).values * mask.values).sum()) if matched else 0.0
+    T_out = apply_trade_shock(T0, matched, fraction)
+    volume_after = float((T_out.values * mask.values).sum()) if matched else 0.0
+
+    report = TradeShockReport(
+        matched_countries=matched,
+        unmatched=unmatched,
+        volume_before=volume_before,
+        volume_after=volume_after,
+        surviving_fraction=fraction,
+    )
+    return T_out, report
 
 
 # ──────────────────────────────────────────────────────────────────────────────
